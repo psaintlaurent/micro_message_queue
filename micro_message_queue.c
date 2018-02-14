@@ -35,7 +35,7 @@ void close_queues(int signal_number) {
 /* 
 TODO: Modify existing buffer.
 Read messages from the buffer until there are no more messages or an 
-external signal interrupts the process.
+external signal interrupts the process.  Use a union so that can handle multiple data types.
 */
 void consume_messages() 
 {
