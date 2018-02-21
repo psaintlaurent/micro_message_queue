@@ -24,12 +24,11 @@
 #define QUEUE_NAME "/test_queue"
 #define SLEEP_TIME_IN_SEC 2
 
-
 mqd_t mq;
 struct mq_attr attr;
 struct sigaction s_action_close;
 struct sigevent msg_received_event;
-struct configuration;
+struct configuration config;
 
 int process_message(struct job *buffer_message) { }
 
@@ -49,7 +48,7 @@ int load_configuration() {
     
         while((buf = fgets(buf, sizeof(buf), fp)) != NULL) {
             
-            /* load configuration into  configuration struct */
+            /* load configuration data from CONFIGURATION_FILE */
         }
     }
 }
