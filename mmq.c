@@ -1,28 +1,12 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
+#include <inttypes.h>
+#include <mqueue.h>
 #include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <errno.h>
-#include <mqueue.h>
 #include "mmq.h"
-
-#define TESTING 1
-
-#if TESTING == 1
-    #define CONFIGURATION_FILE "./mmh.conf"
-    #define REGISTERED_QUEUES "./registered_queues.conf"
-#else
-    #define CONFIGURATION_FILE "/etc/mmh.conf"
-    #define REGISTERED_QUEUES "/etc/registered_queues.conf"
-#endif
-
-#define MAX_LINE_LENGTH 512
-#define MAX_MESSAGES 100000
-#define MAX_MESSAGE_SIZE 8192
-#define QUEUE_NAME "/test_queue"
-#define SLEEP_TIME_IN_SEC 2
 
 mqd_t mq;
 struct mq_attr attr;
@@ -31,26 +15,57 @@ struct sigevent msg_received_event;
 struct configuration config;
 
 int process_message(struct job *buffer_message) { }
-
 void handle_error(char msg[]) { perror(msg); exit( EXIT_FAILURE ); }
 
 int load_configuration() {
-    
+
     FILE *fp;
     char *buf;
-    int output;
-    buf = malloc(MAX_LINE_LENGTH);
-    
-    if((fp = fopen(CONFIGURATION_FILE, "r")) != NULL) {
+    char *kptr;
+    char *vptr;
+    int output=1;
 
-        output = -1;
-    } else {
+    buf = malloc(MAX_CONFIG_LINE_LENGTH);
+    fp = fopen(CONFIGURATION_FILE, "r");
     
-        while((buf = fgets(buf, sizeof(buf), fp)) != NULL) {
-            
-            /* load configuration data from CONFIGURATION_FILE */
+    if(fp) {
+
+    
+        while((fgets(buf, MAX_CONFIG_LINE_LENGTH, fp)) != NULL) {
+
+            kptr = strtok(buf, "= ");
+            vptr = strtok(NULL, "= ");
+
+            if(strcmp(kptr, "maximum_message_size") == 0) {
+
+                config.maximum_message_size = strtol(vptr, NULL, 10);
+                continue;
+            }
+
+            if(strcmp(kptr, "maximum_messages") == 0) {
+
+                config.maximum_messages = strtol(vptr, NULL, 10);
+                continue;
+            }
+
+            if(strcmp(kptr, "queue_file") == 0) {
+
+                config.queue_file = vptr;
+                continue;
+            }
+
+            if(strcmp(kptr, "sleep_time_in_sec") == 0) {
+
+                config.sleep_time_in_sec = strtol(vptr, NULL, 10);
+                continue;
+            }
+
+            output = -1;
+            break;
         }
-    }
+    } else { output = -1; }
+
+    return output;
 }
 
 /* 
@@ -94,7 +109,6 @@ void consume_messages() {
 }
 
 int main(int argc, char **argv) {
-    
     
     load_configuration();
     
