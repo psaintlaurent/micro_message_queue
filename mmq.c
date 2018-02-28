@@ -91,24 +91,23 @@ TODO: Use a union so that messages of multiple data types can be utilized.
 */
 void consume_messages() {
 
-	int i=0;
+    int i=0;
     void *buf;
     ssize_t bytes_read;
     struct job buffer_message;
     
     /* 
-		Note to self, a few days into the future: The way this is coded *will* lead to queues being blocked under the right circumstances
-		but I need to get a simple version going.  Ideally I'll use mq_notify so I don't need to cycle through all of the queues just the ones
-		that are open.
+	Note to self, a few days into the future: The way this is coded *will* lead to queues being blocked under the right circumstances
+	but I need to get a simple version going.  Ideally I'll use mq_notify so I don't need to cycle through all of the queues just the ones
+	that are open.
     */
     
     for(i=0;i<=sizeof(rqueues);i++) {
     
     	while(rqueues[i].attr.mq_curmsgs > 0) {
     
-			buf = malloc(rqueues[i].attr.mq_msgsize);
-
-			if(buf == NULL) { handle_error("Buffer memory allocation failed."); }
+		    buf = malloc(rqueues[i].attr.mq_msgsize);
+		    if(buf == NULL) { handle_error("Buffer memory allocation failed."); }
 
 		    while(bytes_read < rqueues[i].attr.mq_msgsize) {
 		
@@ -134,7 +133,7 @@ int main(int argc, char **argv) {
     sigaction(SIGHUP, &s_action_close, NULL);
     sigaction(SIGILL, &s_action_close, NULL);
 
-	/* TODO: Have message consumption triggered by mq_notify. */
+    /* TODO: Have message consumption triggered by mq_notify. */
     while(1) {
 
         consume_messages();
