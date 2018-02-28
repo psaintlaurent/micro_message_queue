@@ -17,6 +17,7 @@
     #define REGISTERED_QUEUES "/etc/registered_queues.conf"
 #endif
 
+
 union msg_parameter {
     
     int int_val;
@@ -27,8 +28,10 @@ union msg_parameter {
 /* Queues loaded from registered_queues.conf */
 struct registered_queue {
 
-    char *name;
-    char *job;
+	char *name;
+	char *command;
+	mqd_t mq;
+	struct mq_attr attr;	    
 };
 
 struct job {

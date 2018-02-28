@@ -8,8 +8,6 @@
 #include <sys/types.h>
 #include "mmq.h"
 
-mqd_t mq;
-struct mq_attr attr;
 struct sigaction s_action_close;
 struct sigevent msg_received_event;
 struct configuration config;
@@ -41,30 +39,33 @@ int load_configuration() {
             if(strcmp(kptr, "sleep_time_in_sec") == 0) { config.sleep_time_in_sec = strtol(vptr, NULL, 10); continue; }
             output = -1; break;
         }
-        
     	fclose(fp);
+
     } else { output = -1; }
 
     return output;
 }
 
-
-int load_registered_queues() {
+static int load_registered_queues() {
 
     FILE *fp;
     char *buf;
-    int output=1;
+    int output=0;
     int i=0;
     
     buf = malloc(MAX_CONFIG_LINE_LENGTH);
     fp = fopen(config.queue_file, "r");
-
+	
     if(fp) {
     	
         while((fgets(buf, MAX_CONFIG_LINE_LENGTH, fp)) != NULL) {
         
             rqueues[i].name = strtok(buf, "\t");
-            rqueues[i].job = strtok(NULL, "\t");
+            rqueues[i].command = strtok(NULL, "\t");
+            rqueues[i].attr.mq_flags = O_NONBLOCK;
+			rqueues[i].attr.mq_flags = config.maximum_messages;
+			rqueues[i].attr.mq_flags = config.maximum_message_size;
+			rqueues[i].mq = mq_open(rqueues[i].name, O_CREAT | O_RDWR, 0644, &rqueues[i].attr);  //These should eventually be opened read only
         }
         fclose(fp);
     } else { output = -1; }
@@ -72,43 +73,52 @@ int load_registered_queues() {
     return output;
 }
 
-/* 
-TODO: Log the closing of the queues and modify to check for ANY registered queue in the configuration file so they can be cleaned up.
-*/
-void close_queues(int signal_number) {
+static void unload_registered_queues() {
 
-    mq_close(mq);
-    mq_unlink(QUEUE_NAME);
-    exit( EXIT_SUCCESS );
+	int i;
+	int output=0;
+	char *name;
+
+	for(i=0;i<=sizeof(rqueues);i++) {
+
+		if(output == 0) { output = mq_unlink(rqueues[i].name); } 
+		else { break; }
+	}
 }
 
 /* 
-TODO: Modify existing buffer.
-Read messages from the buffer until there are no more messages or an 
-external signal interrupts the process.  Use a union so that messages of multiple data types can be utilized.
+TODO: Use a union so that messages of multiple data types can be utilized.
 */
 void consume_messages() {
 
+	int i=0;
     void *buf;
     ssize_t bytes_read;
     struct job buffer_message;
-    buf = malloc(attr.mq_msgsize);
     
-    if(mq_getattr(mq, &attr) == -1) { handle_error("Failed to get message queue attributes."); }
+    /* 
+		Note to self, a few days into the future: The way this is coded *will* lead to queues being blocked under the right circumstances
+		but I need to get a simple version going.  Ideally I'll use mq_notify so I don't need to cycle through all of the queues just the ones
+		that are open.
+    */
     
-    while(attr.mq_curmsgs > 0) {
+    for(i=0;i<=sizeof(rqueues);i++) {
+    
+    	while(rqueues[i].attr.mq_curmsgs > 0) {
+    
+			buf = malloc(rqueues[i].attr.mq_msgsize);
 
-    	if(buf == NULL) { handle_error("Buffer memory allocation failed."); }
+			if(buf == NULL) { handle_error("Buffer memory allocation failed."); }
 
-        while(bytes_read < attr.mq_msgsize) {
-    
-            bytes_read = mq_receive(mq, buf, attr.mq_msgsize, NULL);
-            if(bytes_read == -1) { handle_error("Failed to read current message.");  }
-        }
-        process_message(&buffer_message);
+		    while(bytes_read < rqueues[i].attr.mq_msgsize) {
+		
+		        bytes_read = mq_receive(rqueues[i].mq, buf, rqueues[i].attr.mq_msgsize, NULL);
+		        if(bytes_read == -1) { handle_error("Failed to read current message.");  }
+		    }
+		    process_message(&buffer_message);
+    	}
+    	free(buf);
     }
-
-    free(buf);
 }
 
 int main(int argc, char **argv) {
@@ -118,22 +128,16 @@ int main(int argc, char **argv) {
     if(load_configuration() == -1) { exit(1); }
     if(load_registered_queues() == -1) { exit(1); }
 
-	/* TODO: Iterate through the registered queues and open each one creating a struct for storing attributes. */
-    attr.mq_flags = O_NONBLOCK;
-    attr.mq_maxmsg = config.maximum_messages;
-    attr.mq_msgsize = config.maximum_message_size;
-
-    mq = mq_open(QUEUE_NAME, O_CREAT | O_RDWR, 0644, &attr);
-    
     /* Initialize the sigaction attributes for redefining sigaction handler.  */
-    s_action_close.sa_handler = close_queues;
+    s_action_close.sa_handler = unload_registered_queues;
     sigaction(SIGINT, &s_action_close, NULL);
     sigaction(SIGHUP, &s_action_close, NULL);
     sigaction(SIGILL, &s_action_close, NULL);
 
+	/* TODO: Have message consumption triggered by mq_notify. */
     while(1) {
 
-        if (attr.mq_curmsgs > 0) { consume_messages(); }
+        consume_messages();
         sleep( config.sleep_time_in_sec );
     }
 
