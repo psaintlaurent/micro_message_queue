@@ -4,6 +4,7 @@
 #define MAX_CONFIG_LINE_LENGTH 40
 #define MAX_MESSAGES 100000
 #define MAX_MESSAGE_SIZE 8192
+#define MAX_NUM_QUEUES 5000
 #define QUEUE_NAME "/test_queue"
 #define SLEEP_TIME_IN_SEC 2
 #define TESTING 1
@@ -24,18 +25,17 @@ union msg_parameter {
 };
 
 /* Queues loaded from registered_queues.conf */
-struct registered_queues {
-    
-    unsigned int queue_id;
-    char name[20];
-    char associated_job[20];
+struct registered_queue {
+
+    char *name;
+    char *job;
 };
 
 struct job {
     
     unsigned int id;
-    char type[5];
-    char name[20];
+    char *type;
+    char *name;
     union msg_parameter parameters[];
 };
 
@@ -45,5 +45,5 @@ struct configuration {
     int maximum_message_size;
     int maximum_messages;
     int sleep_time_in_sec;
-    char *queue_file;
+    char queue_file[20];
 };

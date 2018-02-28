@@ -13,6 +13,7 @@ struct mq_attr attr;
 struct sigaction s_action_close;
 struct sigevent msg_received_event;
 struct configuration config;
+struct registered_queue rqueues[MAX_NUM_QUEUES];
 
 int process_message(struct job *buffer_message) { }
 void handle_error(char msg[]) { perror(msg); exit( EXIT_FAILURE ); }
@@ -30,39 +31,42 @@ int load_configuration() {
     
     if(fp) {
 
-    
         while((fgets(buf, MAX_CONFIG_LINE_LENGTH, fp)) != NULL) {
 
             kptr = strtok(buf, "= ");
             vptr = strtok(NULL, "= ");
-
-            if(strcmp(kptr, "maximum_message_size") == 0) {
-
-                config.maximum_message_size = strtol(vptr, NULL, 10);
-                continue;
-            }
-
-            if(strcmp(kptr, "maximum_messages") == 0) {
-
-                config.maximum_messages = strtol(vptr, NULL, 10);
-                continue;
-            }
-
-            if(strcmp(kptr, "queue_file") == 0) {
-
-                config.queue_file = vptr;
-                continue;
-            }
-
-            if(strcmp(kptr, "sleep_time_in_sec") == 0) {
-
-                config.sleep_time_in_sec = strtol(vptr, NULL, 10);
-                continue;
-            }
-
-            output = -1;
-            break;
+            if(strcmp(kptr, "maximum_message_size") == 0) { config.maximum_message_size = strtol(vptr, NULL, 10); continue; }
+            if(strcmp(kptr, "maximum_messages") == 0) { config.maximum_messages = strtol(vptr, NULL, 10); continue; }
+            if(strcmp(kptr, "queue_file") == 0) { strncpy(config.queue_file, vptr, strlen(vptr)-1); continue; }
+            if(strcmp(kptr, "sleep_time_in_sec") == 0) { config.sleep_time_in_sec = strtol(vptr, NULL, 10); continue; }
+            output = -1; break;
         }
+        
+    	fclose(fp);
+    } else { output = -1; }
+
+    return output;
+}
+
+
+int load_registered_queues() {
+
+    FILE *fp;
+    char *buf;
+    int output=1;
+    int i=0;
+    
+    buf = malloc(MAX_CONFIG_LINE_LENGTH);
+    fp = fopen(config.queue_file, "r");
+
+    if(fp) {
+    	
+        while((fgets(buf, MAX_CONFIG_LINE_LENGTH, fp)) != NULL) {
+        
+            rqueues[i].name = strtok(buf, "\t");
+            rqueues[i].job = strtok(NULL, "\t");
+        }
+        fclose(fp);
     } else { output = -1; }
 
     return output;
@@ -90,7 +94,6 @@ void consume_messages() {
     struct job buffer_message;
     buf = malloc(attr.mq_msgsize);
     
-    
     if(mq_getattr(mq, &attr) == -1) { handle_error("Failed to get message queue attributes."); }
     
     while(attr.mq_curmsgs > 0) {
@@ -110,15 +113,18 @@ void consume_messages() {
 
 int main(int argc, char **argv) {
     
-    load_configuration();
+    FILE *queue_file;
     
-    /* TODO: Read list of queue names and their associated actions from a file. */
-    /* Initialize the queue attributes. */
+    if(load_configuration() == -1) { exit(1); }
+    if(load_registered_queues() == -1) { exit(1); }
+
+	/* TODO: Iterate through the registered queues and open each one creating a struct for storing attributes. */
     attr.mq_flags = O_NONBLOCK;
-    attr.mq_maxmsg = MAX_MESSAGES;
-    attr.mq_msgsize = MAX_MESSAGE_SIZE;
+    attr.mq_maxmsg = config.maximum_messages;
+    attr.mq_msgsize = config.maximum_message_size;
 
     mq = mq_open(QUEUE_NAME, O_CREAT | O_RDWR, 0644, &attr);
+    
     /* Initialize the sigaction attributes for redefining sigaction handler.  */
     s_action_close.sa_handler = close_queues;
     sigaction(SIGINT, &s_action_close, NULL);
@@ -128,7 +134,7 @@ int main(int argc, char **argv) {
     while(1) {
 
         if (attr.mq_curmsgs > 0) { consume_messages(); }
-        sleep( SLEEP_TIME_IN_SEC );
+        sleep( config.sleep_time_in_sec );
     }
 
     return 0;
