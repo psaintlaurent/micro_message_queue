@@ -63,9 +63,9 @@ static int load_registered_queues() {
             rqueues[i].name = strtok(buf, "\t");
             rqueues[i].command = strtok(NULL, "\t");
             rqueues[i].attr.mq_flags = O_NONBLOCK;
-			rqueues[i].attr.mq_flags = config.maximum_messages;
-			rqueues[i].attr.mq_flags = config.maximum_message_size;
-			rqueues[i].mq = mq_open(rqueues[i].name, O_CREAT | O_RDWR, 0644, &rqueues[i].attr);  //These should eventually be opened read only
+            rqueues[i].attr.mq_flags = config.maximum_messages;
+            rqueues[i].attr.mq_flags = config.maximum_message_size;
+            rqueues[i].mq = mq_open(rqueues[i].name, O_CREAT | O_RDWR, 0644, &rqueues[i].attr);  //These should eventually be opened read only
         }
         fclose(fp);
     } else { output = -1; }
@@ -75,15 +75,15 @@ static int load_registered_queues() {
 
 static void unload_registered_queues() {
 
-	int i;
-	int output=0;
-	char *name;
+    int i;
+    int output=0;
+    char *name;
 
-	for(i=0;i<=sizeof(rqueues);i++) {
+    for(i=0;i<=sizeof(rqueues);i++) {
 
-		if(output == 0) { output = mq_unlink(rqueues[i].name); } 
-		else { break; }
-	}
+	    if(output == 0) { output = mq_unlink(rqueues[i].name); } 
+	    else { break; }
+    }
 }
 
 /* 
