@@ -46,6 +46,36 @@ int load_configuration() {
     return output;
 }
 
+/* 
+TODO: Use a union so that messages of multiple data types can be utilized.
+*/
+static void consume_messages(union sigval sv) {
+ 
+    int i=0;
+    void *buf;
+    ssize_t bytes_read;
+    struct mq_attr attr;
+    struct job buffer_message;
+    mqd_t mq = *((mqd_t *) sv.sival_ptr);
+    
+    if(mq_getattr(mq, &attr) == 0) {
+        
+	    while(attr.mq_curmsgs > 0) {
+        
+	        buf = malloc(attr.mq_msgsize);
+	        if(buf == NULL) { handle_error("Buffer memory allocation failed."); }
+ 
+	        while(bytes_read < attr.mq_msgsize) {
+            
+	            bytes_read = bytes_read + mq_receive(mq, buf, attr.mq_msgsize, NULL);
+	            if(bytes_read == -1) { handle_error("Failed to read current message.");  }
+	        }
+	        process_message(&buffer_message);
+	    }
+	    free(buf);
+    } else { handle_error("Failed to get message queue attributes."); return; }
+}
+
 static int load_registered_queues() {
 
     FILE *fp;
@@ -59,15 +89,26 @@ static int load_registered_queues() {
     if(fp) {
     	
         while((fgets(buf, MAX_CONFIG_LINE_LENGTH, fp)) != NULL) {
-        
+ 
+            struct sigevent sv;
+            mqd_t mq; 
+
             rqueues[i].name = strtok(buf, "\t");
             rqueues[i].command = strtok(NULL, "\t");
             rqueues[i].attr.mq_flags = O_NONBLOCK;
             rqueues[i].attr.mq_flags = config.maximum_messages;
             rqueues[i].attr.mq_flags = config.maximum_message_size;
-            rqueues[i].mq = mq_open(rqueues[i].name, O_CREAT | O_RDWR, 0644, &rqueues[i].attr);  //These should eventually be opened read only
-        }
-        fclose(fp);
+
+            /* These should eventually be opened read only. */
+            rqueues[i].mq = mq_open(rqueues[i].name, O_CREAT | O_RDWR, 0644, &rqueues[i].attr);
+            /* Setup sigevent struct for call to mq_notify. */
+            sv.sigev_notify = SIGEV_THREAD;
+            sv.sigev_notify_function = consume_messages;
+            sv.sigev_notify_attributes = NULL;
+            sv.sigev_value.sival_ptr = &rqueues[i].mq;
+            if(mq_notify((mqd_t) rqueues[i].mq, &sv) == -1) { handle_error("Notification handler setup failed."); }
+            printf("mooo"); 
+        } 
     } else { output = -1; }
 
     return output;
@@ -81,42 +122,8 @@ static void unload_registered_queues() {
 
     for(i=0;i<=sizeof(rqueues);i++) {
 
-	    if(output == 0) { output = mq_unlink(rqueues[i].name); } 
+	    if(output == 0) { output = mq_unlink(rqueues[i].name); }
 	    else { break; }
-    }
-}
-
-/* 
-TODO: Use a union so that messages of multiple data types can be utilized.
-*/
-void consume_messages() {
-
-    int i=0;
-    void *buf;
-    ssize_t bytes_read;
-    struct job buffer_message;
-    
-    /* 
-	Note to self, a few days into the future: The way this is coded *will* lead to queues being blocked under the right circumstances
-	but I need to get a simple version going.  Ideally I'll use mq_notify so I don't need to cycle through all of the queues just the ones
-	that are open.
-    */
-    
-    for(i=0;i<=sizeof(rqueues);i++) {
-    
-    	while(rqueues[i].attr.mq_curmsgs > 0) {
-    
-		    buf = malloc(rqueues[i].attr.mq_msgsize);
-		    if(buf == NULL) { handle_error("Buffer memory allocation failed."); }
-
-		    while(bytes_read < rqueues[i].attr.mq_msgsize) {
-		
-		        bytes_read = mq_receive(rqueues[i].mq, buf, rqueues[i].attr.mq_msgsize, NULL);
-		        if(bytes_read == -1) { handle_error("Failed to read current message.");  }
-		    }
-		    process_message(&buffer_message);
-    	}
-    	free(buf);
     }
 }
 
@@ -129,16 +136,13 @@ int main(int argc, char **argv) {
 
     /* Initialize the sigaction attributes for redefining sigaction handler.  */
     s_action_close.sa_handler = unload_registered_queues;
+    
     sigaction(SIGINT, &s_action_close, NULL);
     sigaction(SIGHUP, &s_action_close, NULL);
     sigaction(SIGILL, &s_action_close, NULL);
 
     /* TODO: Have message consumption triggered by mq_notify. */
-    while(1) {
-
-        consume_messages();
-        sleep( config.sleep_time_in_sec );
-    }
+    while(1) { sleep( config.sleep_time_in_sec ); }
 
     return 0;
 }
