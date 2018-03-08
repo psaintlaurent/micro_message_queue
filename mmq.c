@@ -55,9 +55,10 @@ static void consume_messages(union sigval sv) {
     void *buf;
     ssize_t bytes_read;
     struct mq_attr attr;
+    struct sigevent sev;
     struct job buffer_message;
     mqd_t mq = *((mqd_t *) sv.sival_ptr);
-    
+
     if(mq_getattr(mq, &attr) == 0) {
         
 	    while(attr.mq_curmsgs > 0) {
@@ -73,6 +74,15 @@ static void consume_messages(union sigval sv) {
 	        process_message(&buffer_message);
 	    }
 	    free(buf);
+
+        /* Re-register the process for notifcations from this queue. */
+        sev.sigev_notify = SIGEV_SIGNAL;
+        sev.sigev_notify_function = consume_messages;
+        sev.sigev_notify_attributes = NULL;
+        sev.sigev_value.sival_ptr = &mq;
+        mqn = mq_notify(mq, &sev);
+        if(mqn == -1) { handle_error("Re-registering message queue."); }
+
     } else { handle_error("Failed to get message queue attributes."); return; }
 }
 
@@ -91,8 +101,7 @@ static int load_registered_queues() {
         while((fgets(buf, MAX_CONFIG_LINE_LENGTH, fp)) != NULL) {
  
             struct sigevent sv;
-            mqd_t mq; 
-
+        
             rqueues[i].name = strtok(buf, "\t");
             rqueues[i].command = strtok(NULL, "\t");
             rqueues[i].attr.mq_flags = O_NONBLOCK;
@@ -102,12 +111,11 @@ static int load_registered_queues() {
             /* These should eventually be opened read only. */
             rqueues[i].mq = mq_open(rqueues[i].name, O_CREAT | O_RDWR, 0644, &rqueues[i].attr);
             /* Setup sigevent struct for call to mq_notify. */
-            sv.sigev_notify = SIGEV_THREAD;
+            sv.sigev_notify = SIGEV_SIGNAL;
             sv.sigev_notify_function = consume_messages;
             sv.sigev_notify_attributes = NULL;
             sv.sigev_value.sival_ptr = &rqueues[i].mq;
-            if(mq_notify((mqd_t) rqueues[i].mq, &sv) == -1) { handle_error("Notification handler setup failed."); }
-            printf("mooo"); 
+            mq_notify(rqueues[i].mq, &sv);
         } 
     } else { output = -1; }
 
@@ -130,7 +138,7 @@ static void unload_registered_queues() {
 int main(int argc, char **argv) {
     
     FILE *queue_file;
-    
+ 
     if(load_configuration() == -1) { exit(1); }
     if(load_registered_queues() == -1) { exit(1); }
 
