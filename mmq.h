@@ -2,6 +2,7 @@
 
 #define MAX_LINE_LENGTH 512
 #define MAX_CONFIG_LINE_LENGTH 40
+#define MAX_MSG_PER_JOB 20
 #define MAX_MESSAGES 100000
 #define MAX_MESSAGE_SIZE 8192
 #define MAX_NUM_QUEUES 5000
@@ -17,29 +18,26 @@
     #define REGISTERED_QUEUES "/etc/registered_queues.conf"
 #endif
 
-
 union msg_parameter {
     
     int int_val;
-    float float_value;
-    char *string_value;
+    float float_val;
+    char *string_val;
 };
 
 /* Queues loaded from registered_queues.conf */
 struct registered_queue {
 
-	char *name;
-	char *command;
-	mqd_t mq;
-	struct mq_attr attr;	    
+    char *name;
+    char *command;
+    mqd_t mq;
+    struct mq_attr attr; 
 };
 
-struct job {
-    
-    unsigned int id;
-    char *type;
-    char *name;
-    union msg_parameter parameters[];
+struct buffer_msg {
+ 
+    char *associated_queue;
+    union msg_parameter parameters[MAX_MSG_PER_JOB];
 };
 
 /* Queue configuration properties. */

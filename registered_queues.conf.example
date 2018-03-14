@@ -1,0 +1,5 @@
+/some_none_queue	ls -alh /   
+/some_int_queue		ls -alh %d
+/some_float_queue	ls -alh %f
+/some_string_queue	ls -alh %s
+/some_mixed_queue	ls -alh %s %d %f
