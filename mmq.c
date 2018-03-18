@@ -87,7 +87,8 @@ static void consume_messages(union sigval sv) {
 
         /* Re-register the process for notifcations from this queue. */
         sev.sigev_notify = SIGEV_SIGNAL;
-        sev.sigev_signo = SA_SIGINFO;  /* It seems as if this is ignored for mq_notify... */
+        /* It seems as if this is completely ignored for mq_notify */
+        sev.sigev_signo = SA_SIGINFO; 
         sev.sigev_notify_function = consume_messages;
         sev.sigev_value.sival_ptr = &mq;
         mqn = mq_notify(mq, &sev);
@@ -159,6 +160,8 @@ static int load_registered_queues() {
 
             /* Setup sigevent struct for call to mq_notify. */
             sv.sigev_notify = SIGEV_SIGNAL;
+            /* It seems as if this is completely ignored for mq_notify 
+                since the function signature for the notifcation function doesn't change. */
             sv.sigev_signo = SA_SIGINFO;
             sv.sigev_notify_function = consume_messages;
             sv.sigev_value.sival_ptr = &rqueue[i].mq;
