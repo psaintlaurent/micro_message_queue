@@ -1,23 +1,20 @@
+#include <errno.h>
 #include <inttypes.h>
+#include "mmq.h"
 #include <mqueue.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <errno.h>
-#include "mmq.h"
-
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <sys/time.h>
+#include <sys/types.h>
 
-struct sigaction s_action_close;
-struct sigevent msg_received_event;
+
+int rq_elem_count=0;
 struct configuration config;
 struct registered_queue rqueue[MAX_NUM_QUEUES];
-int rq_elem_count=0;
-
 void handle_error(char msg[]) { perror(msg); exit( EXIT_FAILURE ); }
 
 int load_configuration() {
@@ -34,12 +31,20 @@ int load_configuration() {
     if(fp) {
 
         while((fgets(buf, MAX_CONFIG_LINE_LENGTH, fp)) != NULL) {
-
+           
             kptr = strtok(buf, "= ");
             vptr = strtok(NULL, "= ");
             if(strcmp(kptr, "maximum_message_size") == 0) { config.maximum_message_size = strtol(vptr, NULL, 10); continue; }
             if(strcmp(kptr, "maximum_messages") == 0) { config.maximum_messages = strtol(vptr, NULL, 10); continue; }
-            if(strcmp(kptr, "queue_file") == 0) { strncpy(config.queue_file, vptr, strlen(vptr)-1); continue; }
+            if(strcmp(kptr, "queue_file") == 0) {
+
+                while(vptr != ";") {
+
+                    config.queue_file = vptr; 
+                    vptr++; config.queue_file++;
+                }
+                continue;
+            }
             if(strcmp(kptr, "sleep_time_in_sec") == 0) { config.sleep_time_in_sec = strtol(vptr, NULL, 10); continue; }
             output = -1; break;
         }
@@ -82,7 +87,7 @@ static void consume_messages(union sigval sv) {
 
         /* Re-register the process for notifcations from this queue. */
         sev.sigev_notify = SIGEV_SIGNAL;
-        sev.sigev_signo = SA_SIGINFO;
+        sev.sigev_signo = SA_SIGINFO;  /* It seems as if this is ignored for mq_notify... */
         sev.sigev_notify_function = consume_messages;
         sev.sigev_value.sival_ptr = &mq;
         mqn = mq_notify(mq, &sev);
@@ -98,13 +103,14 @@ int process_message(char *buf) { }
 
 static int load_registered_queues() {
 
+    int i=0;
     FILE *fp;
     char *buf;
     int output=0;
-    int i=0;
     
     buf = malloc(MAX_CONFIG_LINE_LENGTH);
     fp = fopen(config.queue_file, "r");
+    printf("%s", config.queue_file);
 	
     if(fp) {
     	
@@ -178,7 +184,8 @@ static void unload_registered_queues() {
 int main(int argc, char **argv) {
     
     FILE *queue_file;
- 
+    struct sigaction s_action_close;
+
     if(load_configuration() == -1) { exit(1); }
     if(load_registered_queues() == -1) { exit(1); }
    
@@ -188,7 +195,6 @@ int main(int argc, char **argv) {
     sigaction(SIGHUP, &s_action_close, NULL);
     sigaction(SIGILL, &s_action_close, NULL);
 
-    /* TODO: Have message consumption triggered by mq_notify. */
     while(1) { sleep( config.sleep_time_in_sec ); }
 
     return 0;

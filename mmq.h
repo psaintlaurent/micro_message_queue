@@ -1,4 +1,5 @@
 #include <sys/types.h>
+#include <mqueue.h>
 
 #define MAX_LINE_LENGTH 512
 #define MAX_CONFIG_LINE_LENGTH 40
@@ -28,9 +29,9 @@ union msg_parameter {
 /* Queues loaded from registered_queues.conf */
 struct registered_queue {
 
+    mqd_t mq;
     char *name;
     char *command;
-    mqd_t mq;
     struct mq_attr attr; 
 };
 
@@ -46,5 +47,5 @@ struct configuration {
     int maximum_message_size;
     int maximum_messages;
     int sleep_time_in_sec;
-    char queue_file[20];
+    char *queue_file;
 };
