@@ -6,7 +6,7 @@
 #define MAX_MSG_PER_JOB 20
 #define MAX_MESSAGES 100000
 #define MAX_MESSAGE_SIZE 8192
-#define MAX_NUM_QUEUES 5000
+#define MAX_NUM_QUEUES 4096
 #define QUEUE_NAME "/test_queue"
 #define SLEEP_TIME_IN_SEC 2
 #define TESTING 1

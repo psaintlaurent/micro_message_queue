@@ -1,5 +1,5 @@
-/some_none_queue	ls -alh /   
-/some_int_queue		ls -alh %d
-/some_float_queue	ls -alh %f
-/some_string_queue	ls -alh %s
-/some_mixed_queue	ls -alh %s %d %f
+/some_none_queue	/path/to/somescript.py
+/some_int_queue		/path/to/somescript.py %d
+/some_float_queue	/path/to/somescript.py %f
+/some_string_queue	/path/to/somescript.py %s
+/some_mixed_queue	/path/to/somescript.py %s %d %f
