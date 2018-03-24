@@ -11,7 +11,6 @@
 #include <sys/time.h>
 #include <sys/types.h>
 
-
 int rq_elem_count=0;
 struct configuration config;
 struct registered_queue rqueue[MAX_NUM_QUEUES];
@@ -43,7 +42,7 @@ int load_configuration() {
                 strncpy(config.queue_file, vptr, strlen(vptr)-1);
                 continue;
             }
-            output = -1; break; 
+            output = -1; break;
         }
     	fclose(fp);
 
@@ -56,17 +55,15 @@ int load_configuration() {
 TODO: Use a union so that messages of multiple data types can be utilized.
 */
 static void consume_messages(union sigval sv) {
-
+    
     int i=0, mqn;
-    void *buf;
+    char *buf;
     char *mqd_attr;
     ssize_t bytes_read;
     struct mq_attr attr;
     struct sigevent sev;
     mqd_t mq = *((mqd_t *) sv.sival_ptr);
 
-    /* Read message queue as a file descriptor. */
-    read(mq, mqd_attr, 1);
     while(mqd_attr != "\0") {
 
         mqd_attr++;
@@ -76,23 +73,24 @@ static void consume_messages(union sigval sv) {
     if(mq_getattr(mq, &attr) == 0) {
         
 	    while(attr.mq_curmsgs > 0) {
-        
+            
 	        buf = malloc(attr.mq_msgsize);
 	        if(buf == NULL) { handle_error("Buffer memory allocation failed."); }
- 
+            
 	        while(bytes_read < attr.mq_msgsize) {
             
 	            bytes_read = bytes_read + mq_receive(mq, buf, attr.mq_msgsize, NULL);
 	            if(bytes_read == -1) { handle_error("Failed to read current message.");  }
 	        }
-	        process_message(&buf);
+
+	        process_message(buf);
 	    }
 	    free(buf);
 
         /* Re-register the process for notifcations from this queue. */
         sev.sigev_notify = SIGEV_THREAD;
         /* It seems as if this is completely ignored for mq_notify */
-        sev.sigev_signo = SA_SIGINFO; 
+        sev.sigev_signo = SA_SIGINFO;
         sev.sigev_notify_function = consume_messages;
         sev.sigev_value.sival_ptr = &mq;
         mqn = mq_notify(mq, &sev);
@@ -102,23 +100,27 @@ static void consume_messages(union sigval sv) {
 }
 
 /* 
-Process the message with the first string being the path to the file to be executed. 
-Everything else being the arguments passed to the file.
+    Process the message with the first string being the path to the file to be executed 
+    everything else being the arguments passed to the file.
 
-If I'm reading the documentation correctly the message queues should be destroyed during the execve run
-I'll find out later.
+    If I'm reading the documentation correctly open message queues should be closed during the execve run 
+    I'll find out later.
 */
 int process_message(char *buf) {
 
     int buffer_size = strlen(buf);
     int output = -1;
-    
 
+    printf("Processing the message %s \n", buf);
     if(buffer_size > 0 && buffer_size < MAX_LINE_LENGTH + 1) {
+    
+        printf("%s %s", strtok(buf, " "), strtok(NULL, "\0"));
 
         char *args[] = { strtok(buf, " "), strtok(NULL, "\0") };
         char *env[] = { NULL };
-        output = execve(args[0], args, env);
+
+        
+        /* I might have to restart the queues here if execve wipes them out. */
         if(output == -1) {
         
             printf("Error executing the command %s %s with %s.", args[0], args[1], strerror(errno));
@@ -128,18 +130,47 @@ int process_message(char *buf) {
     return output;
 }
 
+/* 
+    Read a line that contains a key and value separated by spaces or equal signs
+*/
+
+int readkvline(char *line, char *key, char *value) {
+
+    int offset=0;
+    
+    while(*line != '=' && *line != ' ' && (*key++ = *line++)) {
+        
+        if(++offset > MAX_LINE_LENGTH+1) { return -1; }
+    }
+    *key++ = '\0';
+    offset++;
+    key -= offset+1;
+    
+    while(*line == '=' || *line == ' ') { 
+        
+        line++;
+        if(++offset >= MAX_LINE_LENGTH) { return -1; }
+    }
+
+    offset=0;
+    while(*value++ = *line++) { 
+        
+        offset++;
+    }
+    
+    value -= offset;
+    
+   return 0;
+}
+
 static int load_registered_queues() {
 
     FILE *fp;
-    char *buf;
     struct rlimit rlm;
-    int i=0, output=0;
-
-    buf = malloc(MAX_CONFIG_LINE_LENGTH);
+    int i=0, output=0, mqn;
     fp = fopen(config.queue_file, "r");
 
-    /* 
-
+    /*
         Set the resource limit for the total size of all message queues 
         allowed for this process in bytes.
         This is necessary because creating message queues via mq_open leads to 
@@ -158,41 +189,58 @@ static int load_registered_queues() {
         printf("Failed setting the resource limit for RLIMIT_MSGQUEUE with the error %s", strerror(errno));
         exit(1);
     }
-	
-    if(fp) {
+
+    if(fp != NULL) {
+    
+    	char *line;
     	
-        while((fgets(buf, MAX_CONFIG_LINE_LENGTH, fp)) != NULL) {
- 
+        while(line = fgets(line, MAX_LINE_LENGTH, fp)) {
+            
+            if(line == NULL) { return -1; }
+            
+            int offset=0;
             struct sigevent sv;
- 
-            rqueue[i].name = strtok(buf, "\t");
-            rqueue[i].command = strtok(NULL, "\t");
+            rqueue[i].name = malloc(MAX_LINE_LENGTH);
+            rqueue[i].command = malloc(MAX_LINE_LENGTH);
+            
+            readkvline(line, rqueue[i].name, rqueue[i].command);
+            
             rqueue[i].attr.mq_flags = O_NONBLOCK;
             rqueue[i].attr.mq_maxmsg = config.maximum_messages;
-            rqueue[i].attr.mq_msgsize = config.maximum_message_size;            
-            /* These should eventually be opened read only. */
-            rqueue[i].mq = mq_open(rqueue[i].name, O_CREAT|O_RDWR, 0644, &rqueue[i].attr); 
+            rqueue[i].attr.mq_msgsize = config.maximum_message_size;
 
-            if(rqueue[i].mq == (mqd_t) -1) { 
-                printf("mq_open %s %d %d %s \n", 
-                        rqueue[i].name, 
-                        config.maximum_messages, 
-                        config.maximum_message_size, 
-                        strerror(errno)); 
+            /* 
+                These should eventually be opened read only.
+            */
+            rqueue[i].mq = mq_open(rqueue[i].name, O_CREAT|O_RDWR, 0644, &rqueue[i].attr);
+
+            if(rqueue[i].mq == (mqd_t) -1) {
+
+                printf("mq_open \n\n name: %s \n command: %d\n max_messages: %d\n max_msg_size: %d\n error: %s\n",
+                        rqueue[i].name,
+                        rqueue[i].command,
+                        config.maximum_messages,
+                        config.maximum_message_size,
+                        strerror(errno));
                 exit(1);
             }
 
-            /* Setup sigevent struct for call to mq_notify. */
-            sv.sigev_notify = SIGEV_THREAD;
-            /* It seems as if this is completely ignored for mq_notify 
-                since the function signature for the notification function doesn't change. */
+            /* 
+                Setup sigevent struct for call to mq_notify. 
+            */
+            sv.sigev_notify = SIGEV_SIGNAL;
+            /*
+                It seems as if this is completely ignored for mq_notify 
+                since the function signature for the notification function doesn't change. 
+            */
             sv.sigev_signo = SA_SIGINFO;
             sv.sigev_notify_function = consume_messages;
             sv.sigev_value.sival_ptr = &rqueue[i].mq;
-            mq_notify(rqueue[i].mq, &sv);
-            buf = malloc(MAX_CONFIG_LINE_LENGTH); 
+            mqn = mq_notify(rqueue[i].mq, &sv);
+            if(mqn == -1) { printf("Registering message queue %s failed with %s.", rqueue[i].name, strerror(errno)); exit(1); }
+            
             i++;
-        } 
+        }
     } else { output = -1; }
 
     rq_elem_count = i;
@@ -207,20 +255,21 @@ static void unload_registered_queues() {
 }
 
 int main(int argc, char **argv) {
-    
-    FILE *queue_file;
+
     struct sigaction s_action_close;
 
     if(load_configuration() == -1) { exit(1); }
     if(load_registered_queues() == -1) { exit(1); }
-   
-    /* Initialize the sigaction attributes for redefining sigaction handler. */
+
+
+    /* 
+        Initialize the sigaction attributes for redefining sigaction handler. 
+    */
     s_action_close.sa_handler = unload_registered_queues;    
     sigaction(SIGINT, &s_action_close, NULL);
     sigaction(SIGHUP, &s_action_close, NULL);
     sigaction(SIGILL, &s_action_close, NULL);
 
-    while(1) { sleep( config.sleep_time_in_sec ); }
 
     return 0;
 }

@@ -1,6 +1,4 @@
-- Find out if its true that message queues are destroyed during a run of execve.  It's kind of odd because message queue descriptors are supposedly a type of file descriptor yet file descriptors are not destroyed during execve runs.
-- Find a way to map message queue descriptors back to the filename from which it was created via mq_open so that I can log issues inside of the mq_notify function handler.  I'm not sure why the name isn't a part of the mq_attr struct so it's accessible via mq_getattr.  I'm not sure if this is a POSIX issue, if this is linux specific or I completely missed something in the docs. I can't be the first person who has run into this problem...
-
+- mq_notify notification function isn't being triggered after mq_send...
 - Create message queue clients.
 - Allow tcp/ip communication between client and server.
 - Allow clients to register with the server.
