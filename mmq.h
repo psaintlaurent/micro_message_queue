@@ -49,3 +49,13 @@ struct configuration {
     int sleep_time_in_sec;
     char *queue_file;
 };
+
+int load_configuration();
+void process_message(char *buf);
+static int load_registered_queues();
+static void unload_registered_queues();
+
+static void consume_messages(mqd_t md);
+static void consume_messages_handler(union sigval sv);
+
+
