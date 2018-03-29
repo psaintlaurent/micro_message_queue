@@ -63,6 +63,7 @@ int readkvline(char *line, char *key, char *value) {
         
         if(++offset > MAX_LINE_LENGTH+1) { return -1; }
     }
+
     *key = '\0';
     key -= offset;
     
